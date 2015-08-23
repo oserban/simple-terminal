@@ -30,6 +30,7 @@
 package simple.terminal;
 
 import com.googlecode.lanterna.TerminalPosition;
+import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.screen.Screen;
@@ -63,6 +64,8 @@ public class BasicTerminal implements TerminalLogger {
 
     private LimitedList<String> history = new LimitedList<>(10);
     private int historyIndex = 0;
+
+    private boolean running = false;
 
     public BasicTerminal(PredictionGenerator predictionGenerator, CommandExecutor commandExecutor) throws IOException {
         this.predictionGenerator = predictionGenerator;
@@ -132,10 +135,18 @@ public class BasicTerminal implements TerminalLogger {
     }
 
     private void message(String message) {
-        textGraphics.putString(0, inputLine++, message);
-        if (inputLine > screen.getTerminalSize().getRows() - 1) {
-            screen.scrollLines(0, screen.getTerminalSize().getRows(), 1);
-            inputLine--;
+        TerminalSize terminalSize = screen.getTerminalSize();
+        while (message.length() > terminalSize.getColumns()) {
+            String localMsg = message.substring(0, terminalSize.getColumns());
+            message(localMsg);
+            message = message.substring(terminalSize.getColumns());
+        }
+        if (message.length() > 0) {
+            textGraphics.putString(0, inputLine++, message);
+            if (inputLine > terminalSize.getRows() - 1) {
+                screen.scrollLines(0, screen.getTerminalSize().getRows(), 1);
+                inputLine--;
+            }
         }
     }
 
@@ -151,8 +162,19 @@ public class BasicTerminal implements TerminalLogger {
         resetCursor();
     }
 
+    public boolean exitTerminal(TerminalCommand.Params params) {
+        message("Exiting terminal ...");
+        fireTerminalExit();
+        running = false;
+        return true;
+    }
+
     public void process() throws IOException {
-        boolean running = true;
+        if (running) {
+            return;
+        }
+
+        running = true;
         screen.startScreen();
         textGraphics = screen.newTextGraphics();
         resetCursor();
@@ -206,9 +228,7 @@ public class BasicTerminal implements TerminalLogger {
                         terminalBuffer = new StringBuffer();
                         break;
                     case Escape:
-                        message("Exiting terminal ...");
-                        fireTerminalExit();
-                        running = false;
+                        exitTerminal(null);
                         break;
                 }
                 resetCursor();
